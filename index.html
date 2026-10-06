@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+<title>Cozy Space Story Kit</title>
+<!-- Cozy Space Story Kit: a tiny visual novel engine in one HTML file (plain JavaScript + canvas).
+     Write your story in story.js. Art, font, music and sounds come from the free Cozy Space set.
+     Code: MIT license (see LICENSE.txt). Assets: Cozy Space asset license. -->
+<style>
+  html, body { margin: 0; height: 100%; background: #0d1020; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; }
+  body { display: flex; align-items: center; justify-content: center; }
+  canvas { image-rendering: pixelated; image-rendering: crisp-edges; display: block; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script src="story.js"></script>
+<script>
+"use strict";
+// The game is drawn at 320 x 180 and scaled up by whole numbers so pixels stay sharp.
+const W = 320, H = 180;
+const cv = document.getElementById("c"), ctx = cv.getContext("2d");
+let S = 3;
+function resize() {
+  const k = Math.min(innerWidth / W, innerHeight / H);
+  S = k >= 1 ? Math.floor(k) : k;
+  cv.width = W * S; cv.height = H * S; ctx.imageSmoothingEnabled = false;
+}
+addEventListener("resize", resize); resize();
+
+// ---------- images ----------
+const MOODS = ["neutral", "happy", "sad", "angry", "surprised"];
+const FILES = {
+  box: "ui/dialog-box-light", boxDark: "ui/dialog-box-dark", nameTag: "ui/name-tag", arrow: "ui/continue-arrow-2f",
+  btn: "ui/button-teal-normal", btnHover: "ui/button-teal-hover", btnAlt: "ui/button-amber-normal", btnAltHover: "ui/button-amber-hover",
+  "stars-near": "backgrounds/stars-near-tile", "stars-far": "backgrounds/stars-far-tile",
+  planet: "planets/planet-gasblue-spin-24f", ship: "ships/falcon-cream-thrust-4f",
+};
+for (const [k, c] of Object.entries(CHARACTERS)) FILES["char:" + k] = "sheets/" + c.sheet;
+for (const b of Object.values(BACKGROUNDS)) {
+  if (b.space) FILES[b.space] = "backgrounds/" + b.space;
+  if (b.image) FILES[b.image] = b.image;
+  for (const [p] of b.props || []) FILES["prop:" + p] = "props/" + p;
+}
+const IMG = {};
+let loaded = 0;
+const toLoad = Object.keys(FILES).length;
+for (const [k, f] of Object.entries(FILES)) { const im = new Image(); im.onload = im.onerror = () => { loaded++; }; im.src = "assets/" + f + ".png"; IMG[k] = im; }
+
+const ready = (k) => IMG[k] && IMG[k].width;
+function draw(k, x, y, w, h) { if (ready(k)) ctx.drawImage(IMG[k], Math.round(x), Math.round(y), w || IMG[k].width, h || IMG[k].height); }
+function frame(k, f, fw, fh, x, y) { if (ready(k)) ctx.drawImage(IMG[k], f * fw, 0, fw, fh, Math.round(x), Math.round(y), fw, fh); }
+function portrait(who, f, x, y, size = 96) { const k = "char:" + who; if (ready(k)) ctx.drawImage(IMG[k], f * 96, 0, 96, 96, Math.round(x), Math.round(y), size, size); }
+function tile(k, dx, dy) {
+  if (!ready(k)) return;
+  const w = IMG[k].width, h = IMG[k].height;
+  for (let y = -((dy % h) + h) % h; y < H; y += h) for (let x = -((dx % w) + w) % w; x < W; x += w) ctx.drawImage(IMG[k], Math.round(x), Math.round(y));
+}
+// 9-slice: stretch the middle of a box image, keep the corners.
+function nine(k, x, y, w, h, b = 8) {
+  if (!ready(k)) return;
+  const im = IMG[k], iw = im.width, ih = im.height, cw = iw - 2 * b, ch = ih - 2 * b;
+  x = Math.round(x); y = Math.round(y);
+  for (const p of [[0, 0, b, b, x, y, b, b], [b, 0, cw, b, x + b, y, w - 2 * b, b], [iw - b, 0, b, b, x + w - b, y, b, b],
+    [0, b, b, ch, x, y + b, b, h - 2 * b], [b, b, cw, ch, x + b, y + b, w - 2 * b, h - 2 * b], [iw - b, b, b, ch, x + w - b, y + b, b, h - 2 * b],
+    [0, ih - b, b, b, x, y + h - b, b, b], [b, ih - b, cw, b, x + b, y + h - b, w - 2 * b, b], [iw - b, ih - b, b, b, x + w - b, y + h - b, b, b]]) ctx.drawImage(im, ...p);
+}
+
+// ---------- text: Cozy Space Pixel Font, sharp at 10 px (1 font pixel = 1 canvas pixel) and 20 px ----------
+for (const [file, weight] of [["CozySpacePixel-Regular", "400"], ["CozySpacePixel-Bold", "700"]]) {
+  try { const f = new FontFace("CSP", `url(assets/fonts/${file}.woff)`, { weight }); document.fonts.add(f); f.load().catch(() => {}); } catch (e) {}
+}
+function font(bold = false, big = false) { ctx.font = `${bold ? 700 : 400} ${big ? 20 : 10}px CSP, "Courier New", monospace`; }
+function text(t, x, y, { color = "#171b34", bold = false, big = false, align = "left", shadow = null } = {}) {
+  font(bold, big); ctx.textAlign = align; ctx.textBaseline = "top";
+  if (shadow) { ctx.fillStyle = shadow; ctx.fillText(t, Math.round(x), Math.round(y) + 1); }
+  ctx.fillStyle = color; ctx.fillText(t, Math.round(x), Math.round(y));
+}
+function wrap(t, width) {
+  font();
+  const lines = []; let line = "";
+  for (const word of t.split(" ")) {
+    const test = line ? line + " " + word : word;
+    if (ctx.measureText(test).width > width && line) { lines.push(line); line = word; } else line = test;
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+
+// ---------- sound (needs a web server: itch.io, or a local one, see README) ----------
+let audio = null, muted = false, master = null, music = null;
+const SFX = {};
+try { muted = localStorage.getItem("csk-muted") === "1"; } catch (e) {}
+async function startAudio() {
+  try {
+    if (!audio) { audio = new (window.AudioContext || window.webkitAudioContext)(); master = audio.createGain(); master.gain.value = muted ? 0 : 1; master.connect(audio.destination); }
+    if (audio.state === "suspended") await audio.resume();
+    if (music || audio.state !== "running") return;
+    music = "loading";
+    for (const n of new Set(["typing", "ui-hover", "ui-confirm", "jingle-win", ...Object.values(STORY).map((n) => n.sound).filter(Boolean)])) {
+      fetch(`assets/sfx/${n}.wav`).then((r) => r.arrayBuffer()).then((b) => audio.decodeAudioData(b)).then((d) => { SFX[n] = d; }).catch(() => {});
+    }
+    if (!GAME.music) return;
+    const buf = await audio.decodeAudioData(await (await fetch(`assets/music/${GAME.music}.wav`)).arrayBuffer());
+    const g = audio.createGain(); g.gain.value = 0.28; g.connect(master);
+    const src = audio.createBufferSource(); src.buffer = buf; src.loop = true; src.connect(g); src.start();
+    music = src;
+  } catch (e) { music = null; }
+}
+function play(name, volume = 0.5) {
+  if (!audio || !SFX[name] || muted) return;
+  const src = audio.createBufferSource(), g = audio.createGain(); g.gain.value = volume;
+  src.buffer = SFX[name]; src.connect(g); g.connect(master); src.start();
+}
+function toggleMute() {
+  muted = !muted; try { localStorage.setItem("csk-muted", muted ? "1" : "0"); } catch (e) {}
+  if (master) master.gain.value = muted ? 0 : 1;
+}
+
+// ---------- story state ----------
+let screen = "loading";   // loading | title | story | end
+let node = null, nodeId = "", chars = 0, choice = 0, clock = 0, nodeTime = 0, lastBg = "", fade = 0;
+let state = {}, pointer = { x: -1, y: -1 }, buttons = [], visibleChoices = [];
+const val = (v) => (typeof v === "function" ? v(state) : v);
+
+function go(id) {
+  if (id === "end") { screen = "end"; play("jingle-win", 0.5); return; }
+  if (!STORY[id]) { console.warn("Story node not found:", id); screen = "end"; return; }
+  nodeId = id; node = STORY[id]; chars = 0; nodeTime = 0; choice = 0;
+  if (node.bg !== lastBg) { fade = 1; lastBg = node.bg; }
+  if (node.sound) play(node.sound, 0.45);
+  visibleChoices = node.choices ? node.choices.filter((c) => !c.if || c.if(state)) : [];
+}
+function advance() {
+  if (!node) return;
+  const full = val(node.text).length;
+  if (chars < full) { chars = full; return; }        // first click: show the whole line
+  if (node.choices) { pick(choice); return; }
+  if (node.do) node.do(state);
+  play("ui-hover", 0.25);
+  go(val(node.next));
+}
+function pick(i) {
+  const c = visibleChoices[i]; if (!c) return;
+  if (node.do) node.do(state);
+  if (c.do) c.do(state);
+  play("ui-confirm", 0.4);
+  go(val(c.next));
+}
+function start() { state = {}; lastBg = ""; screen = "story"; go("start"); }
+
+// ---------- backgrounds ----------
+function drawBackground(id) {
+  const b = BACKGROUNDS[id] || {};
+  if (b.space) {
+    tile(b.space, clock * 2, 0);
+    tile("stars-near", clock * 6, 0);
+    if (b.planet) frame("planet", Math.floor(clock * 6) % 24, 82, 48, b.ship ? 30 : 200, 20);
+    if (b.ship) frame("ship", Math.floor(clock * 10) % 4, 40, 56, 196, Math.max(40, 190 - nodeTime * 50));
+    if (b.window) {
+      ctx.fillStyle = "#262c40"; ctx.fillRect(0, 0, W, 6); ctx.fillRect(0, 0, 6, H); ctx.fillRect(W - 6, 0, 6, H);
+      ctx.fillStyle = "#3a4170"; ctx.fillRect(0, 6, W, 2); ctx.fillRect(6, 0, 2, H); ctx.fillRect(W - 8, 0, 2, H);
+    }
+  } else if (b.image) {
+    if (b.x === undefined) {
+      tile("stars-far", clock * 3, 0);
+      const im = IMG[b.image];
+      if (ready(b.image)) draw(b.image, Math.round((W - im.width) / 2), Math.max(0, Math.round((112 - im.height) / 2)));
+    } else draw(b.image, b.x, b.y);
+  }
+  for (const [p, x, y] of b.props || []) draw("prop:" + p, x, y);
+}
+
+// ---------- drawing ----------
+const inside = (p, b) => p.x >= b.x && p.x < b.x + b.w && p.y >= b.y && p.y < b.y + b.h;
+function button(k, kHover, x, y, w, h, label, action) {
+  const b = { x, y, w, h, action }; buttons.push(b);
+  nine(inside(pointer, b) ? kHover : k, x, y, w, h, 4);
+  text(label, x + w / 2, y + Math.round(h / 2) - 6, { align: "center", color: "#151325" });
+}
+const BOX = { x: 6, y: 118, w: 308, h: 58 };
+function drawStory() {
+  drawBackground(node.bg);
+  const who = node.who, mood = val(node.mood) || "neutral", t = val(node.text);
+  const typing = chars < t.length;
+  if (who) {
+    const y = 18 + Math.round(Math.sin(clock * 2));
+    if (mood === "neutral" && typing) portrait(who, 5 + (Math.floor(clock * 8) % 2), 112, y);   // talking
+    else portrait(who, Math.max(0, MOODS.indexOf(mood)), 112, y);
+  }
+  nine("box", BOX.x, BOX.y, BOX.w, BOX.h);
+  if (who) {
+    const name = CHARACTERS[who].name;
+    font(true); const w = Math.ceil(ctx.measureText(name).width) + 16;
+    nine("nameTag", 14, BOX.y - 10, w, 16, 6);
+    text(name, 22, BOX.y - 8, { bold: true });
+  }
+  let left = Math.floor(chars);
+  wrap(t, BOX.w - 24).slice(0, 3).forEach((line, i) => { text(line.slice(0, Math.max(0, left)), BOX.x + 12, BOX.y + 10 + i * 12); left -= line.length + 1; });
+  if (!typing && node.choices) drawChoices();
+  else if (!typing) frame("arrow", Math.floor(clock * 3) % 2, 8, 8, BOX.x + BOX.w - 18, BOX.y + BOX.h - 14);
+  text("M " + (muted ? "sound off" : "sound on"), W - 12, 10, { align: "right", color: "#8f9bb8", shadow: "#0d1020" });
+}
+function drawChoices() {
+  const h = visibleChoices.length * 13 + 10, y0 = BOX.y - h - 4;
+  nine("boxDark", BOX.x + 40, y0 - 4, BOX.w - 80, h + 4);
+  buttons = [];
+  visibleChoices.forEach((c, i) => {
+    const b = { x: BOX.x + 44, y: y0 + 2 + i * 13, w: BOX.w - 88, h: 13, action: () => pick(i) };
+    buttons.push(b);
+    if (inside(pointer, b) && choice !== i) { choice = i; play("ui-hover", 0.2); }
+    text((choice === i ? "→ " : "   ") + c.text, b.x + 6, b.y + 2, { color: choice === i ? "#ffd27a" : "#e6e8f2" });
+  });
+}
+function drawTitle() {
+  drawBackground(Object.keys(BACKGROUNDS)[0]);
+  ctx.fillStyle = "rgba(13,16,32,0.55)"; ctx.fillRect(0, 0, W, H);
+  text(GAME.title1, W / 2, 22, { big: true, bold: true, align: "center", color: "#f2ecff", shadow: "#2a1f4a" });
+  text(GAME.title2, W / 2, 44, { big: true, bold: true, align: "center", color: "#b9a6ff", shadow: "#2a1f4a" });
+  text(GAME.subtitle, W / 2, 70, { align: "center", color: "#c9b8ff" });
+  const n = GAME.cast.length, x0 = Math.round(W / 2 - (n * 42 + 6) / 2);
+  GAME.cast.forEach((who, i) => portrait(who, i % 2 ? 0 : 1, x0 + i * 42, 86, 48));
+  button("btn", "btnHover", W / 2 - 45, 138, 90, 18, "START", () => { startAudio(); start(); });
+  text(GAME.hint, W / 2, 162, { align: "center", color: "#8f9bb8" });
+}
+function drawEnd() {
+  drawBackground(lastBg);
+  ctx.fillStyle = "rgba(13,16,32,0.7)"; ctx.fillRect(0, 0, W, H);
+  text(GAME.endTitle, W / 2, 20, { big: true, bold: true, align: "center", color: "#f2ecff", shadow: "#2a1f4a" });
+  GAME.endLines(state).forEach((l, i) => text(l, W / 2, 50 + i * 14, { align: "center", color: i ? "#e6e8f2" : "#ffd27a", bold: i === 0 }));
+  button("btn", "btnHover", W / 2 - 50, 112, 100, 18, "PLAY AGAIN", start);
+  if (GAME.link) button("btnAlt", "btnAltHover", W / 2 - 60, 136, 120, 18, GAME.link.label, () => window.open(GAME.link.url, "_blank"));
+}
+
+// ---------- loop ----------
+let last = performance.now();
+function loop(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  update(dt); render();
+  requestAnimationFrame(loop);
+}
+function update(dt) {
+  clock += dt; nodeTime += dt; fade = Math.max(0, fade - dt * 3);
+  if (screen === "loading" && loaded >= toLoad) screen = "title";
+  if (screen === "story" && node) {
+    const t = val(node.text);
+    if (chars < t.length) {
+      const before = Math.floor(chars);
+      chars = Math.min(t.length, chars + dt * 42);       // typing speed: 42 letters per second
+      if (Math.floor(chars) !== before && Math.floor(chars) % 4 === 0 && t[Math.floor(chars)] !== " ") play("typing", 0.12);
+    }
+  }
+}
+function render() {
+  ctx.setTransform(S, 0, 0, S, 0, 0); ctx.imageSmoothingEnabled = false;
+  ctx.fillStyle = "#0d1020"; ctx.fillRect(0, 0, W, H);
+  buttons = [];
+  if (screen === "loading") text("Loading " + Math.floor(loaded / toLoad * 100) + "%", W / 2, H / 2, { align: "center", color: "#e6e8f2" });
+  else if (screen === "title") drawTitle();
+  else if (screen === "story") drawStory();
+  else drawEnd();
+  if (fade > 0) { ctx.fillStyle = `rgba(13,16,32,${fade})`; ctx.fillRect(0, 0, W, H); }
+}
+
+// ---------- input: keyboard, mouse and touch ----------
+addEventListener("keydown", (e) => {
+  startAudio();
+  if (e.code === "KeyM") { toggleMute(); return; }
+  if (screen === "title" && (e.code === "Space" || e.code === "Enter")) { start(); e.preventDefault(); return; }
+  if (screen === "end" && e.code === "Enter") { start(); return; }
+  if (screen !== "story") return;
+  if (node.choices && chars >= val(node.text).length && visibleChoices.length) {
+    if (e.code === "ArrowUp" || e.code === "KeyW") { choice = (choice + visibleChoices.length - 1) % visibleChoices.length; play("ui-hover", 0.2); }
+    if (e.code === "ArrowDown" || e.code === "KeyS") { choice = (choice + 1) % visibleChoices.length; play("ui-hover", 0.2); }
+  }
+  if (e.code === "Space" || e.code === "Enter") { advance(); e.preventDefault(); }
+});
+const toCanvas = (e) => { const r = cv.getBoundingClientRect(); return { x: (e.clientX - r.left) / r.width * W, y: (e.clientY - r.top) / r.height * H }; };
+cv.addEventListener("pointermove", (e) => { pointer = toCanvas(e); });
+cv.addEventListener("pointerdown", (e) => {
+  startAudio();
+  pointer = toCanvas(e);
+  const b = buttons.find((b) => inside(pointer, b));
+  if (b) { b.action(); return; }
+  if (screen === "story" && !(node.choices && chars >= val(node.text).length)) advance();
+});
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
