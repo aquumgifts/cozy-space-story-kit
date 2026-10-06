@@ -65,7 +65,7 @@ const BACKGROUNDS = {
 const kind = (s) => { s.kindness = (s.kindness || 0) + 1; };
 
 const STORY = {
-  start: { bg: "bridge", who: "ada", mood: "happy", text: "Welcome aboard, Cadet! Your first shift on Station Aquum, and of course the power picked today to act up.", next: "a2" },
+  start: { bg: "bridge", who: "ada", mood: "happy", text: "Welcome aboard, Cadet! Your first shift on Station Bramble, and of course the power picked today to act up.", next: "a2" },
   a2: { bg: "bridge", who: "ada", mood: "neutral", text: "A cargo ship docks in ten minutes. The reactor has to be at full power before then.", next: "a3" },
   a3: { bg: "bridge", who: "ada", mood: "neutral", text: "Rosa says it needs three things: a fuse, a coolant cell and a new chip. Ask the crew. They'll help you.", next: "hub" },
 
@@ -104,7 +104,7 @@ const STORY = {
   g4b: { bg: "corridor", who: "gus", mood: "neutral", text: "Go on, then. And close the door, it's drafty.", next: "hub", do: (s) => { s.chip = true; } },
 
   x1: { bg: "lab", who: "bot", mood: "surprised", text: "POWER LEVELS RISING. Please do not lick the reactor.", next: "d1", sound: "powerup" },
-  d1: { bg: "dock", who: "zib", mood: "happy", text: "Greetings, Station Aquum! The lights are on! I bring forty crates of space tea.", next: "d2", sound: "thruster" },
+  d1: { bg: "dock", who: "zib", mood: "happy", text: "Greetings, Station Bramble! The lights are on! I bring forty crates of space tea.", next: "d2", sound: "thruster" },
   d2: { bg: "dock", who: "ada", mood: (s) => (s.kindness === 3 ? "happy" : "neutral"),
     text: (s) => (s.kindness === 3 ? "The whole crew told me how kind you were today. Welcome home, Cadet."
       : "Not bad for a first shift, Cadet. Tomorrow, take a little more time with the crew."), next: "end" },
