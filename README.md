@@ -37,4 +37,3 @@ Run it locally with any static server (`python3 -m http.server 8000`) so music a
 - **Assets**: the [Cozy Space set](https://itch.io/c/8266575) by Bramble & Byte, free to use in your games (commercial too); don't resell the assets themselves. Credit appreciated: "Cozy Space set by Bramble & Byte".
 
 More sizes and formats of every pack, and the complete bundle: [aquumgifts.itch.io](https://aquumgifts.itch.io).
-The art is drawn in code and the music and sounds are synthesized with our own code. No AI image, music or sound generators were used.
