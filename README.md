@@ -36,4 +36,4 @@ Run it locally with any static server (`python3 -m http.server 8000`) so music a
 - **Code** (`index.html`, `story.js`): MIT, see [LICENSE](LICENSE).
 - **Assets**: the [Cozy Space set](https://itch.io/c/8266575) by Bramble & Byte, free to use in your games (commercial too); don't resell the assets themselves. Credit appreciated: "Cozy Space set by Bramble & Byte".
 
-More sizes and formats of every pack, and the complete bundle: [aquumgifts.itch.io](https://aquumgifts.itch.io).
+More sizes and formats of every pack: [aquumgifts.itch.io](https://aquumgifts.itch.io). Every Cozy Space pack (portraits, characters, tiles, UI, sound and music) in one download: [Cozy Space Complete](https://aquumgifts.itch.io/cozy-space-complete).
